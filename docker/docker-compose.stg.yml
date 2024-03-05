@@ -1,0 +1,59 @@
+version: '3.3'
+services:
+  backend-gui:
+    image: "$DOCKER_REGISTRY/finance/faktur-backend-gui:$IMGVER"
+    command: ["/opt/backend-gui", ".env.staging"]
+    networks:
+      - traefik_net
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.backend-gui.rule=PathPrefix(`/backend-gui`)"
+        - "traefik.http.routers.backend-gui.entrypoints=ep2"
+        - "traefik.http.routers.backend-gui.tls=true"
+        - "traefik.http.services.backend-gui.loadbalancer.server.port=8097" 
+        - "traefik.docker.network=traefik_net"
+    volumes:
+        - "/data/finance_tax:/var/finance_tax"
+        - "/data/finance_tax/DSJ:/var/finance_tax/DSJ" 
+        - "/data/finance_tax/DSJ/process:/var/finance_tax/DSJ/process"         
+        - "/data/finance_tax/DSJ/others:/var/finance_tax/DSJ/others"         
+        - "/data/finance_tax/DSJ/10:/var/finance_tax/DSJ/10"
+        - "/data/finance_tax/DSJ/20:/var/finance_tax/DSJ/20"
+        - "/data/finance_tax/DSJ/35:/var/finance_tax/DSJ/35"
+        - "/data/finance_tax/DSJ/40:/var/finance_tax/DSJ/40"
+        - "/data/finance_tax/DSJ/45:/var/finance_tax/DSJ/45"
+        - "/data/finance_tax/ST:/var/finance_tax/ST"
+        - "/data/finance_tax/ST/process:/var/finance_tax/ST/process"
+        - "/data/finance_tax/ST/others:/var/finance_tax/ST/others"
+        - "/data/finance_tax/ST/10:/var/finance_tax/ST/10"
+        - "/data/finance_tax/ST/20:/var/finance_tax/ST/20"
+        - "/data/finance_tax/ST/35:/var/finance_tax/ST/35"
+        - "/data/finance_tax/ST/40:/var/finance_tax/ST/40"
+        - "/data/finance_tax/ST/45:/var/finance_tax/ST/45"
+        - "/data/finance_tax/SF:/var/finance_tax/SF"
+        - "/data/finance_tax/SF/process:/var/finance_tax/SF/process"
+        - "/data/finance_tax/SF/others:/var/finance_tax/SF/others"
+        - "/data/finance_tax/SF/10:/var/finance_tax/SF/10"
+        - "/data/finance_tax/SF/20:/var/finance_tax/SF/20"
+        - "/data/finance_tax/SF/35:/var/finance_tax/SF/35"
+        - "/data/finance_tax/SF/40:/var/finance_tax/SF/40"
+        - "/data/finance_tax/SF/45:/var/finance_tax/SF/45"
+        - "/data/finance_tax/SAP/:/var/finance_tax/SAP" 
+        - "/data/finance_tax/SAP/Email_Archive:/var/finance_tax/SAP/Email_Archive"
+        - "/data/finance_tax/SAP/Archive_toSAP:/var/finance_tax/SAP/Archive_toSAP"        
+        - "/data/source_data:/var/source_data"
+        - "/data/source_data/done_process:/var/source_data/done_process"
+        - "/data/source_data/unprocess:/var/source_data/unprocess"
+        - "/data/backend_gui_temp_files:/var/temp_files"
+        - "backend_gui_logs:/opt/logs"        
+volumes:
+  backend_gui_logs:
+    driver: local
+
+networks:
+  traefik_net:
+    external:
+      name: traefik_net

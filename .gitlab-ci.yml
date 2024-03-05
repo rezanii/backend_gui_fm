@@ -1,0 +1,101 @@
+stages:
+  - build_app
+  - build_image
+  - deploy_stg
+  - deploy_prod
+
+variables:
+  GIT_SSL_NO_VERIFY: "true"
+
+build_app:
+  image: devops-registry.smartfren.com/devops/golang:1.15.3-alpine-git
+  stage: build_app
+  script:
+    - export http_proxy="http://jkt-proxy02.smartfren.com:8080"
+    - export https_proxy="http://jkt-proxy02.smartfren.com:8080"
+    - rm -f go.mod go.sum
+    - go mod init backend_gui
+    - go mod vendor
+    - go mod verify 
+    - env GO111MODULE=on GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -ldflags '-extldflags "-static"'  -o backend-gui main.go
+  artifacts:
+    paths:
+      - backend-gui
+  only:
+    - master
+    - tags
+    
+build_docker_image:
+  image: docker:18.09.7-dind-git
+  stage: build_image
+  tags:
+     - docker-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+  services:
+    - name: docker:18.09.7-dind
+  script:
+    - BASE_URL=`echo $CI_REPOSITORY_URL | sed "s;\/*$CI_PROJECT_PATH.*;;"`
+    - REPO_URL="$BASE_URL/it-dssm/tls-docker-swarm/docker-registry-prod.git"
+    - rm -fr registry; git clone $REPO_URL registry
+    - DOCKER_REGISTRY=$(cat registry/DOCKER_REGISTRY_DNS)
+    - export IMGVER=$(echo $CI_BUILD_REF_NAME |  sed 's/\//_/g' ) 
+    - cat registry/password  | docker login -u $(cat registry/user)  --password-stdin ${DOCKER_REGISTRY} 
+    - docker build -t $DOCKER_REGISTRY/finance/faktur-backend-gui:$IMGVER  -f docker/Dockerfile .    
+    - docker push $DOCKER_REGISTRY/finance/faktur-backend-gui:$IMGVER 
+  allow_failure: true
+  only:
+    - master
+    - tags
+ 
+deploy_stg:
+  image: docker:18.09.7-dind-git
+  stage: deploy_stg
+  environment: Staging
+  tags:
+     - docker-dind
+  variables:
+    DOCKER_HOST: "tcp://10.0.148.255:2376"
+    DOCKER_TLS_VERIFY: 1
+  script:
+     - BASE_URL=`echo $CI_REPOSITORY_URL | sed "s;\/*$CI_PROJECT_PATH.*;;"`
+     - REG_URL="${BASE_URL}/it-dssm/tls-docker-swarm/docker-registry-prod.git"
+     - REPO_URL="$BASE_URL/it-dssm/tls-docker-swarm/enterprise-dev.git"     
+     - rm -fr regf; git clone ${REG_URL}  regf
+     - rm -fr cred; git clone ${REPO_URL} cred
+     - export DOCKER_REGISTRY=$(cat regf/DOCKER_REGISTRY_DNS)
+     - export IMGVER=$(echo $CI_BUILD_REF_NAME |  sed 's/\//_/g' )      
+     - mkdir -p ~/.docker          
+     - cp cred/ca.pem    ~/.docker/ca.pem
+     - cp cred/cert.pem  ~/.docker/cert.pem
+     - cp cred/key.pem   ~/.docker/key.pem
+     - cat regf/password  | docker login -u $(cat regf/user) --password-stdin ${DOCKER_REGISTRY}      
+     - docker stack deploy -c docker/docker-compose.stg.yml --with-registry-auth finance_faktur
+  only:
+    - master
+  
+deploy_prod:
+  image: docker:18.09.7-dind-git
+  stage: deploy_prod
+  environment: Production
+  tags:
+     - docker-dind
+  script:
+     - BASE_URL=`echo $CI_REPOSITORY_URL | sed "s;\/*$CI_PROJECT_PATH.*;;"`
+     - REG_URL="${BASE_URL}/it-dssm/tls-docker-swarm/docker-registry-prod.git"
+     - REPO_URL="$BASE_URL/it-dssm/tls-docker-swarm/gpr-prod.git"     
+     - rm -fr regf; git clone ${REG_URL}  regf
+     - rm -fr cred; git clone ${REPO_URL} cred
+     - export DOCKER_REGISTRY=$(cat regf/DOCKER_REGISTRY_DNS)
+     - export IMGVER=$(echo $CI_BUILD_REF_NAME |  sed 's/\//_/g' )      
+     - mkdir -p ~/.docker          
+     - cp cred/ca.pem    ~/.docker/ca.pem
+     - cp cred/cert.pem  ~/.docker/cert.pem
+     - cp cred/key.pem   ~/.docker/key.pem
+     - source cred/docker_profile
+     - cat regf/password  | docker login -u $(cat regf/user) --password-stdin ${DOCKER_REGISTRY}      
+     - docker stack deploy -c docker/docker-compose.prod.yml --with-registry-auth finance_faktur
+  when: manual
+  only:
+    - tags
